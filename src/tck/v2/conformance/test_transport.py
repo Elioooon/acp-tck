@@ -83,9 +83,9 @@ async def test_no_embedded_newlines(agent_launch, tmp_path):
 
     The harness's `readuntil(b"\\n")` reader makes an embedded newline unobservable within one
     entry -- any literal `\\n` the agent writes ends that read right there. The real signal is
-    reassembly: if an entry failed to parse (an incomplete fragment) but concatenating it with
-    the next entry's raw bytes (rejoined by the stripped newline) parses as valid JSON, the agent
-    split one message across a literal embedded newline.
+    reassembly: if an entry failed to parse (an incomplete fragment) but concatenating it with one
+    or more following entries' raw bytes (rejoined by the stripped newlines) parses as valid JSON,
+    the agent split one message across literal embedded newlines.
     """
     received = await _drive_full_exchange(agent_launch, tmp_path)
 
@@ -95,13 +95,17 @@ async def test_no_embedded_newlines(agent_launch, tmp_path):
             continue  # already a complete, valid message (or batch) on its own line
         combined = bytearray(entry.raw)
         for following in received[index + 1 :]:
-            if following.parse_error is None:
-                break
             combined.extend(b"\n")
             combined.extend(following.raw)
             try:
-                json.loads(combined.decode("utf-8"))
-            except (UnicodeDecodeError, json.JSONDecodeError):
+                text = combined.decode("utf-8")
+                json.loads(text)
+            except UnicodeDecodeError:
+                break
+            except json.JSONDecodeError as exc:
+                # Once malformed before the end, appending lines cannot repair it.
+                if exc.pos < len(text.rstrip()):
+                    break
                 continue
             pytest.fail(
                 "a message appears to have been split across literal embedded newlines: "

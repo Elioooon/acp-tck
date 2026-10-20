@@ -15,6 +15,7 @@ def main() -> None:
         {
             "jsonrpc": "2.0",
             "method": "session/update",
+            "_meta": {"tags": ["a", "b"]},
             "params": {
                 "sessionId": "split-message",
                 "update": {
